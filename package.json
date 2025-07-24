@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "crypto-js": "^4.2.0",
     "firebase": "^10.7.1",
+    "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.263.1",
+    "papaparse": "^5.5.3",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.8.0",
     "react-scripts": "5.0.1",
+    "uuid": "^11.1.0",
     "web-vitals": "^2.1.4"
   },
   "devDependencies": {

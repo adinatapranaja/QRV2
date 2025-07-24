@@ -8,13 +8,16 @@ import {
   Users, 
   BarChart3, 
   FileText, 
-  Star, 
   Play,
   ChevronLeft,
   ChevronRight,
   Crown,
   Shield,
-  User
+  User,
+  Calendar,
+  QrCode,
+  Camera,
+  TrendingUp
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -27,7 +30,25 @@ const Sidebar = () => {
       icon: <Home className="w-5 h-5" />,
       label: 'Dashboard',
       path: '/dashboard',
-      roles: ['owner', 'admin', 'client']
+      roles: ['owner', 'admin']
+    },
+    {
+      icon: <Calendar className="w-5 h-5" />,
+      label: 'Events',
+      path: '/events',
+      roles: ['owner', 'admin']
+    },
+    {
+      icon: <QrCode className="w-5 h-5" />,
+      label: 'QR Scanner',
+      path: '/scanner',
+      roles: ['owner', 'admin']
+    },
+    {
+      icon: <TrendingUp className="w-5 h-5" />,
+      label: 'Statistics',
+      path: '/stats',
+      roles: ['owner', 'admin']
     },
     {
       icon: <BarChart3 className="w-5 h-5" />,
@@ -39,28 +60,23 @@ const Sidebar = () => {
       icon: <Users className="w-5 h-5" />,
       label: 'Users',
       path: '/users',
-      roles: ['owner', 'admin']
+      roles: ['owner']
     },
     {
       icon: <FileText className="w-5 h-5" />,
       label: 'Reports',
       path: '/reports',
-      roles: ['owner', 'admin', 'client']
-    },
-    {
-      icon: <Star className="w-5 h-5" />,
-      label: 'Premium',
-      path: '/premium',
-      roles: ['owner', 'admin', 'client']
+      roles: ['owner', 'admin']
     },
     {
       icon: <Settings className="w-5 h-5" />,
       label: 'Settings',
       path: '/settings',
-      roles: ['owner', 'admin', 'client']
+      roles: ['owner']
     }
   ];
 
+  // Filter menu items based on user role
   const filteredMenuItems = menuItems.filter(item => 
     item.roles.includes(userRole)
   );
@@ -91,6 +107,11 @@ const Sidebar = () => {
     }
   };
 
+  // Don't show sidebar for client role
+  if (userRole === 'client') {
+    return null;
+  }
+
   return (
     <div className={`fixed left-0 top-0 h-full bg-black/50 backdrop-blur-md border-r border-white/10 transition-all duration-300 z-40 ${
       isCollapsed ? 'w-20' : 'w-64'
@@ -99,12 +120,12 @@ const Sidebar = () => {
       <div className="p-6 border-b border-white/10">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 netflix-gradient rounded-xl flex items-center justify-center">
-            <Play className="w-5 h-5 text-white" />
+            <QrCode className="w-5 h-5 text-white" />
           </div>
           {!isCollapsed && (
             <div className="flex-1">
-              <h1 className="text-xl font-bold text-white">YourApp</h1>
-              <p className="text-xs text-gray-400">Dashboard</p>
+              <h1 className="text-xl font-bold text-white">QR Events</h1>
+              <p className="text-xs text-gray-400">Management</p>
             </div>
           )}
         </div>
@@ -162,14 +183,11 @@ const Sidebar = () => {
           ) : (
             <>
               <ChevronLeft className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              <span className="text-sm font-medium">Collapse</span>
+              <span>Collapse</span>
             </>
           )}
         </button>
       </div>
-
-      {/* Bottom Decoration */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 netflix-gradient"></div>
     </div>
   );
 };

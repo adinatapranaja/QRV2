@@ -5,12 +5,19 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
 
-// Import pages
+// Import existing pages
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Subscribe from './pages/Subscribe';
+
+// Import new QR Event pages
+import Events from './pages/Events';
+import Guests from './pages/Guests';
+import QRGenerator from './pages/QRGenerator';
+import QRScanner from './pages/QRScanner';
+import Stats from './pages/Stats';
 
 // Import styles
 import './styles/global.css';
@@ -25,8 +32,8 @@ const LoadingScreen = () => (
   </div>
 );
 
-// Protected Route Component
-const ProtectedRoute = ({ children, requireRole = null }) => {
+// Protected Route Component with Role Check
+const ProtectedRoute = ({ children, requireRole = null, allowedRoles = [] }) => {
   const { currentUser, userRole, loading } = useAuth();
 
   if (loading) {
@@ -37,13 +44,18 @@ const ProtectedRoute = ({ children, requireRole = null }) => {
     return <Navigate to="/login" replace />;
   }
 
+  // If user has no role, redirect to subscribe
   if (!userRole) {
+    return <Navigate to="/subscribe" replace />;
+  }
+
+  // If user is client, always redirect to subscribe (except for subscribe page itself)
+  if (userRole === 'client' && window.location.pathname !== '/subscribe') {
     return <Navigate to="/subscribe" replace />;
   }
 
   // Role-based access control
   if (requireRole) {
-    // If specific role required, check exact match or higher privileges
     if (userRole === 'owner') {
       // Owner has access to everything
     } else if (userRole === 'admin' && requireRole !== 'owner') {
@@ -55,10 +67,15 @@ const ProtectedRoute = ({ children, requireRole = null }) => {
     }
   }
 
+  // Check allowed roles array
+  if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return children;
 };
 
-// Public Route Component (redirect to dashboard if already logged in)
+// Public Route Component
 const PublicRoute = ({ children }) => {
   const { currentUser, userRole, loading } = useAuth();
 
@@ -66,8 +83,12 @@ const PublicRoute = ({ children }) => {
     return <LoadingScreen />;
   }
 
-  if (currentUser && userRole) {
+  if (currentUser && userRole && userRole !== 'client') {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  if (currentUser && userRole === 'client') {
+    return <Navigate to="/subscribe" replace />;
   }
 
   if (currentUser && !userRole) {
@@ -137,11 +158,11 @@ const AppRoutes = () => {
         } 
       />
 
-      {/* Protected Routes */}
+      {/* Protected Routes - Existing */}
       <Route 
         path="/dashboard" 
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
             <Dashboard />
           </ProtectedRoute>
         } 
@@ -149,26 +170,110 @@ const AppRoutes = () => {
       <Route 
         path="/settings" 
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireRole="owner">
             <Settings />
           </ProtectedRoute>
         } 
       />
 
-      {/* Admin/Owner only routes (example) */}
+      {/* QR Event Routes - Admin & Owner Only */}
       <Route 
-        path="/admin" 
+        path="/events" 
         element={
-          <ProtectedRoute requireRole="admin">
-            <Dashboard /> {/* You can create separate Admin component */}
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Events />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/events/:eventId/guests" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Guests />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/events/:eventId/qr-generator" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <QRGenerator />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/events/:eventId/scanner" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <QRScanner />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/events/:eventId/stats" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Stats />
           </ProtectedRoute>
         } 
       />
 
-      {/* Subscription Route (for users without role) */}
+      {/* Additional Routes for Sidebar Menu */}
+      <Route 
+        path="/scanner" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Events />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/stats" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Events />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/analytics" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/users" 
+        element={
+          <ProtectedRoute requireRole="owner">
+            <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/reports" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Dashboard />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Subscription Route */}
       <Route 
         path="/subscribe" 
         element={<Subscribe />} 
+      />
+
+      {/* Admin Routes (Owner only) */}
+      <Route 
+        path="/admin" 
+        element={
+          <ProtectedRoute requireRole="owner">
+            <Dashboard />
+          </ProtectedRoute>
+        } 
       />
 
       {/* Catch all route */}
