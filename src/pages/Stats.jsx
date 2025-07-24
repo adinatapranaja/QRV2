@@ -1,178 +1,219 @@
 // src/pages/Stats.jsx
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { 
-  collection, 
-  query, 
-  getDocs, 
-  doc, 
-  getDoc 
-} from 'firebase/firestore';
-import { db } from '../firebase/firebase-config';
+import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { exportEventStatsToCSV } from '../utils/csv';
-import {
-  ArrowLeft,
+import { 
+  BarChart3, 
+  TrendingUp, 
   Users,
-  UserCheck,
-  UserX,
-  Download,
   Calendar,
+  CheckCircle,
   Clock,
-  MapPin,
-  BarChart3,
-  PieChart,
-  Activity,
-  Target,
-  Award,
+  ArrowUp,
+  ArrowDown,
+  Download,
   RefreshCw,
-  QrCode
+  Activity,
+  Eye,
+  AlertCircle
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
+import { exportEventStatsToCSV } from '../utils/csv';
+import { showToast } from '../utils/toast';
 
 const Stats = () => {
-  const { eventId } = useParams();
-  
-  const [event, setEvent] = useState(null);
-  const [guests, setGuests] = useState([]);
+  const { userRole } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [timeFilter, setTimeFilter] = useState('all');
+  const [error, setError] = useState(null);
+  const [stats, setStats] = useState({
+    totalEvents: 0,
+    totalGuests: 0,
+    totalCheckIns: 0,
+    upcomingEvents: 0
+  });
+  const [events, setEvents] = useState([]);
+  const [chartData, setChartData] = useState([]);
 
-  // Load event and guests data
+  // Mock data loader with null checking
+  const loadData = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Mock events data with proper null checking
+      const mockEvents = [
+        {
+          id: '1',
+          name: 'Tech Conference 2024',
+          date: '2024-12-15',
+          time: '09:00',
+          location: 'Convention Center',
+          totalGuests: 250,
+          checkedInGuests: 187,
+          status: 'upcoming',
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: '2', 
+          name: 'Annual Meetup',
+          date: '2024-12-20',
+          time: '14:00',
+          location: 'Hotel Ballroom',
+          totalGuests: 150,
+          checkedInGuests: 142,
+          status: 'upcoming',
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: '3',
+          name: 'Workshop Series',
+          date: '2024-11-25',
+          time: '10:00', 
+          location: 'Training Center',
+          totalGuests: 80,
+          checkedInGuests: 75,
+          status: 'completed',
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: '4',
+          name: 'Networking Event',
+          date: '2024-11-30',
+          time: '18:00',
+          location: 'Rooftop Venue',
+          totalGuests: 120,
+          checkedInGuests: 98,
+          status: 'completed',
+          createdAt: new Date().toISOString()
+        }
+      ];
+
+      // Process events with null safety
+      const processedEvents = mockEvents.map(event => ({
+        ...event,
+        date: event.date || new Date().toISOString().split('T')[0],
+        attendanceRate: event.totalGuests && event.totalGuests > 0 ? 
+          Math.round((event.checkedInGuests || 0) / event.totalGuests * 100) : 0
+      }));
+
+      // Calculate stats with null checking
+      const totalEvents = processedEvents.length;
+      const totalGuests = processedEvents.reduce((sum, event) => sum + (event.totalGuests || 0), 0);
+      const totalCheckIns = processedEvents.reduce((sum, event) => sum + (event.checkedInGuests || 0), 0);
+      const upcomingEvents = processedEvents.filter(event => {
+        if (!event.date) return false;
+        try {
+          return new Date(event.date) > new Date();
+        } catch {
+          return false;
+        }
+      }).length;
+
+      // Create chart data with null safety
+      const chartDataProcessed = processedEvents.map(event => ({
+        name: event.name ? (event.name.length > 15 ? event.name.substring(0, 15) + '...' : event.name) : 'Unnamed Event',
+        guests: event.totalGuests || 0,
+        checkIns: event.checkedInGuests || 0,
+        rate: event.attendanceRate || 0
+      }));
+
+      setStats({
+        totalEvents,
+        totalGuests,
+        totalCheckIns,
+        upcomingEvents
+      });
+
+      setEvents(processedEvents);
+      setChartData(chartDataProcessed);
+      
+    } catch (err) {
+      console.error('Error loading stats:', err);
+      setError('Failed to load statistics data');
+      showToast('Failed to load statistics', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadData();
-  }, [eventId]); // Remove loadData dependency to avoid infinite loop
+  }, [loadData]);
 
-  const loadData = async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshing(true);
-    
-    try {
-      // Load event
-      const eventDoc = await getDoc(doc(db, 'events', eventId));
-      if (eventDoc.exists()) {
-        setEvent({ id: eventDoc.id, ...eventDoc.data() });
-      }
-
-      // Load guests
-      const guestsQuery = query(collection(db, 'events', eventId, 'guests'));
-      const guestsSnapshot = await getDocs(guestsQuery);
-      const guestsData = guestsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setGuests(guestsData);
-
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setLoading(false);
-    } finally {
-      if (showRefreshing) setRefreshing(false);
-    }
-  };
-
-  // Calculate statistics
-  const calculateStats = () => {
-    const totalGuests = guests.length;
-    const checkedInGuests = guests.filter(guest => guest.checkedIn);
-    const notCheckedInGuests = guests.filter(guest => !guest.checkedIn);
-    
-    const checkinRate = totalGuests > 0 ? Math.round((checkedInGuests.length / totalGuests) * 100) : 0;
-
-    // Filter by time if needed
-    let filteredCheckins = checkedInGuests;
-    if (timeFilter !== 'all') {
-      const filterTime = new Date();
-      
-      switch (timeFilter) {
-        case 'today':
-          filterTime.setHours(0, 0, 0, 0);
-          break;
-        case 'hour':
-          filterTime.setHours(filterTime.getHours() - 1);
-          break;
-        case 'week':
-          filterTime.setDate(filterTime.getDate() - 7);
-          break;
-        default:
-          break;
-      }
-
-      filteredCheckins = checkedInGuests.filter(guest => 
-        guest.checkInTime && new Date(guest.checkInTime) >= filterTime
-      );
-    }
-
-    // Category breakdown
-    const categoryStats = guests.reduce((acc, guest) => {
-      const category = guest.category || 'Unknown';
-      if (!acc[category]) {
-        acc[category] = { total: 0, checkedIn: 0 };
-      }
-      acc[category].total++;
-      if (guest.checkedIn) {
-        acc[category].checkedIn++;
-      }
-      return acc;
-    }, {});
-
-    // Check-in timeline (hourly breakdown for today)
-    const timelineStats = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    checkedInGuests.forEach(guest => {
-      if (guest.checkInTime) {
-        const checkInDate = new Date(guest.checkInTime);
-        if (checkInDate >= today) {
-          const hour = checkInDate.getHours();
-          timelineStats[hour] = (timelineStats[hour] || 0) + 1;
-        }
-      }
-    });
-
-    return {
-      totalGuests,
-      checkedInGuests: checkedInGuests.length,
-      notCheckedInGuests: notCheckedInGuests.length,
-      checkinRate,
-      categoryStats,
-      timelineStats,
-      filteredCheckins: filteredCheckins.length,
-      recentCheckins: checkedInGuests
-        .filter(guest => guest.checkInTime)
-        .sort((a, b) => new Date(b.checkInTime) - new Date(a.checkInTime))
-        .slice(0, 5)
-    };
-  };
-
-  // Export statistics
   const handleExportStats = () => {
     try {
-      const stats = calculateStats();
-      exportEventStatsToCSV(stats, guests, event?.name || 'event');
+      if (events.length === 0) {
+        showToast('No data to export', 'warning');
+        return;
+      }
+      
+      exportEventStatsToCSV(events, 'event_statistics');
       showToast('Statistics exported successfully!', 'success');
     } catch (error) {
-      console.error('Error exporting statistics:', error);
+      console.error('Export error:', error);
       showToast('Failed to export statistics', 'error');
     }
   };
 
-  // Toast notification function
-  const showToast = (message, type) => {
-    console.log(`${type}: ${message}`);
+  const handleRefresh = () => {
+    loadData();
+    showToast('Statistics refreshed!', 'info');
   };
 
-  if (loading) {
+  if (userRole === 'client') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center">
-        <div className="loading-spinner"></div>
+        <div className="text-center">
+          <BarChart3 className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
+          <p className="text-gray-400">Statistics are only available for admin and owner accounts</p>
+        </div>
       </div>
     );
   }
 
-  const stats = calculateStats();
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black">
+        <Sidebar />
+        <div className="ml-64 flex flex-col">
+          <Navbar />
+          <main className="flex-1 p-8 pt-24 flex items-center justify-center">
+            <div className="text-center max-w-md">
+              <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-white mb-4">Error Loading Statistics</h2>
+              <p className="text-gray-400 mb-6">{error}</p>
+              <button
+                onClick={handleRefresh}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 flex items-center space-x-2 mx-auto"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Try Again</span>
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black">
@@ -183,44 +224,28 @@ const Stats = () => {
         <main className="flex-1 p-8 pt-24">
           {/* Header */}
           <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center space-x-4">
-              <Link
-                to={`/events/${eventId}/guests`}
-                className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-3xl font-bold text-white mb-2">Event Statistics</h1>
-                <p className="text-gray-400">{event?.name}</p>
-              </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2 flex items-center">
+                <BarChart3 className="w-8 h-8 mr-3 text-blue-400" />
+                Event Statistics
+              </h1>
+              <p className="text-gray-400">
+                Overview of your event performance and metrics
+              </p>
             </div>
             
             <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2">
-                <select
-                  value={timeFilter}
-                  onChange={(e) => setTimeFilter(e.target.value)}
-                  className="px-4 py-2 bg-black/20 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-red-600"
-                >
-                  <option value="all">All Time</option>
-                  <option value="today">Today</option>
-                  <option value="hour">Last Hour</option>
-                  <option value="week">This Week</option>
-                </select>
-              </div>
-              
               <button
-                onClick={() => loadData(true)}
-                disabled={refreshing}
-                className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200 disabled:opacity-50"
+                onClick={handleRefresh}
+                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all duration-200"
               >
-                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw className="w-4 h-4" />
+                <span>Refresh</span>
               </button>
               
               <button
                 onClick={handleExportStats}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded-lg transition-all duration-300"
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all duration-200"
               >
                 <Download className="w-4 h-4" />
                 <span>Export</span>
@@ -228,244 +253,309 @@ const Stats = () => {
             </div>
           </div>
 
-          {/* Event Info */}
-          <div className="glass-dark p-6 rounded-2xl border border-white/10 mb-8">
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="flex items-center space-x-3">
-                <Calendar className="w-6 h-6 text-blue-400" />
-                <div>
-                  <p className="text-gray-400 text-sm">Date</p>
-                  <p className="text-white font-medium">
-                    {new Date(event.date).toLocaleDateString()}
-                  </p>
-                </div>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[
+              {
+                title: 'Total Events',
+                value: stats.totalEvents,
+                change: '+12%',
+                trend: 'up',
+                icon: <Calendar className="w-5 h-5" />
+              },
+              {
+                title: 'Total Guests',
+                value: stats.totalGuests,
+                change: '+8%',
+                trend: 'up',
+                icon: <Users className="w-5 h-5" />
+              },
+              {
+                title: 'Check-ins',
+                value: stats.totalCheckIns,
+                change: '+15%',
+                trend: 'up',
+                icon: <CheckCircle className="w-5 h-5" />
+              },
+              {
+                title: 'Upcoming Events',
+                value: stats.upcomingEvents,
+                change: '+5%',
+                trend: 'up',
+                icon: <Clock className="w-5 h-5" />
+              }
+            ].map((stat, index) => (
+              <div key={index} className="glass-dark p-6 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 group">
+                {loading ? (
+                  <div className="animate-pulse">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="w-12 h-12 bg-gray-600 rounded-xl"></div>
+                      <div className="w-16 h-4 bg-gray-600 rounded"></div>
+                    </div>
+                    <div className="w-20 h-8 bg-gray-600 rounded mb-2"></div>
+                    <div className="w-24 h-4 bg-gray-600 rounded"></div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="p-3 bg-blue-600/20 rounded-xl group-hover:scale-110 transition-transform">
+                        {stat.icon}
+                      </div>
+                      <div className={`flex items-center space-x-1 text-sm ${
+                        stat.trend === 'up' ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        {stat.trend === 'up' ? 
+                          <ArrowUp className="w-4 h-4" /> : 
+                          <ArrowDown className="w-4 h-4" />
+                        }
+                        <span>{stat.change}</span>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <p className="text-3xl font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">
+                        {stat.value.toLocaleString()}
+                      </p>
+                      <p className="text-gray-400 text-sm">{stat.title}</p>
+                    </div>
+                  </>
+                )}
               </div>
-              
-              <div className="flex items-center space-x-3">
-                <Clock className="w-6 h-6 text-green-400" />
-                <div>
-                  <p className="text-gray-400 text-sm">Time</p>
-                  <p className="text-white font-medium">{event.time}</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <MapPin className="w-6 h-6 text-purple-400" />
-                <div>
-                  <p className="text-gray-400 text-sm">Location</p>
-                  <p className="text-white font-medium">{event.location}</p>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
 
-          {/* Main Statistics Cards */}
-          <div className="grid md:grid-cols-4 gap-6 mb-8">
-            <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-gray-400 text-sm">Total Guests</p>
-                  <p className="text-3xl font-bold text-white">{stats.totalGuests}</p>
-                </div>
-                <Users className="w-8 h-8 text-blue-400" />
-              </div>
-              <div className="text-xs text-gray-400">
-                Registered guests
-              </div>
-            </div>
-            
-            <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-gray-400 text-sm">Checked In</p>
-                  <p className="text-3xl font-bold text-green-400">{stats.checkedInGuests}</p>
-                </div>
-                <UserCheck className="w-8 h-8 text-green-400" />
-              </div>
-              <div className="text-xs text-gray-400">
-                Successfully checked in
-              </div>
-            </div>
-            
-            <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-gray-400 text-sm">Pending</p>
-                  <p className="text-3xl font-bold text-red-400">{stats.notCheckedInGuests}</p>
-                </div>
-                <UserX className="w-8 h-8 text-red-400" />
-              </div>
-              <div className="text-xs text-gray-400">
-                Not yet checked in
-              </div>
-            </div>
-            
-            <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-gray-400 text-sm">Attendance Rate</p>
-                  <p className="text-3xl font-bold text-purple-400">{stats.checkinRate}%</p>
-                </div>
-                <Target className="w-8 h-8 text-purple-400" />
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
-                <div 
-                  className="bg-purple-400 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${stats.checkinRate}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
-
+          {/* Charts */}
           <div className="grid lg:grid-cols-2 gap-8 mb-8">
-            {/* Category Breakdown */}
+            {/* Bar Chart */}
             <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
-                <PieChart className="w-5 h-5 mr-2" />
-                Category Breakdown
-              </h3>
-              
-              <div className="space-y-4">
-                {Object.entries(stats.categoryStats).map(([category, data]) => {
-                  const percentage = data.total > 0 ? Math.round((data.checkedIn / data.total) * 100) : 0;
-                  return (
-                    <div key={category} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-white font-medium">{category}</span>
-                        <span className="text-gray-400 text-sm">
-                          {data.checkedIn}/{data.total} ({percentage}%)
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div 
-                          className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${percentage}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-white flex items-center">
+                  <BarChart3 className="w-5 h-5 mr-2 text-blue-400" />
+                  Event Attendance
+                </h3>
+                <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+                  View Details
+                </button>
               </div>
-            </div>
-
-            {/* Check-in Timeline */}
-            <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
-                <BarChart3 className="w-5 h-5 mr-2" />
-                Check-in Timeline (Today)
-              </h3>
               
-              {Object.keys(stats.timelineStats).length === 0 ? (
-                <div className="text-center py-12">
-                  <Activity className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-400">No check-ins today</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {Array.from({ length: 24 }, (_, hour) => {
-                    const count = stats.timelineStats[hour] || 0;
-                    const maxCount = Math.max(...Object.values(stats.timelineStats));
-                    const percentage = maxCount > 0 ? (count / maxCount) * 100 : 0;
-                    
-                    return (
-                      <div key={hour} className="flex items-center space-x-3">
-                        <span className="text-gray-400 text-sm w-12">
-                          {hour.toString().padStart(2, '0')}:00
-                        </span>
-                        <div className="flex-1 bg-gray-700 rounded-full h-2">
-                          <div 
-                            className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-500"
-                            style={{ width: `${percentage}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-white text-sm w-8">{count}</span>
-                      </div>
-                    );
-                  }).filter((_, hour) => stats.timelineStats[hour] > 0)}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Recent Check-ins */}
-          <div className="glass-dark p-6 rounded-2xl border border-white/10">
-            <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
-              <Award className="w-5 h-5 mr-2" />
-              Recent Check-ins
-            </h3>
-            
-            {stats.recentCheckins.length === 0 ? (
-              <div className="text-center py-12">
-                <UserCheck className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">No check-ins yet</p>
-              </div>
-            ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {stats.recentCheckins.map((guest) => (
-                  <div key={guest.id} className="p-4 bg-black/20 rounded-xl">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h4 className="text-white font-medium">{guest.name}</h4>
-                        <p className="text-gray-400 text-sm">{guest.category}</p>
-                      </div>
-                      <UserCheck className="w-5 h-5 text-green-400" />
-                    </div>
-                    
-                    <div className="text-xs text-gray-400">
-                      {new Date(guest.checkInTime).toLocaleString()}
+              <div className="h-80">
+                {loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="loading-spinner"></div>
+                  </div>
+                ) : chartData.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <BarChart3 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400">No data available</p>
                     </div>
                   </div>
-                ))}
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="#9CA3AF"
+                        fontSize={12}
+                      />
+                      <YAxis stroke="#9CA3AF" fontSize={12} />
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: '#1F2937',
+                          border: '1px solid #374151',
+                          borderRadius: '8px',
+                          color: '#F9FAFB'
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="guests" fill="#3B82F6" name="Total Guests" />
+                      <Bar dataKey="checkIns" fill="#10B981" name="Check-ins" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Pie Chart */}
+            <div className="glass-dark p-6 rounded-2xl border border-white/10">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-white flex items-center">
+                  <Activity className="w-5 h-5 mr-2 text-purple-400" />
+                  Attendance Rate
+                </h3>
+                <button className="text-purple-400 hover:text-purple-300 text-sm font-medium">
+                  View Details
+                </button>
+              </div>
+              
+              <div className="h-80">
+                {loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="loading-spinner"></div>
+                  </div>
+                ) : chartData.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <Activity className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400">No data available</p>
+                    </div>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, rate }) => `${name}: ${rate}%`}
+                        outerRadius={120}
+                        fill="#8884d8"
+                        dataKey="rate"
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={`hsl(${index * 45}, 70%, 60%)`} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: '#1F2937',
+                          border: '1px solid #374151',
+                          borderRadius: '8px',
+                          color: '#F9FAFB'
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="mt-8 grid md:grid-cols-3 gap-6">
-            <Link
-              to={`/events/${eventId}/guests`}
-              className="glass-dark p-6 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 group"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-blue-600/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Users className="w-6 h-6 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold mb-1">Manage Guests</h3>
-                  <p className="text-gray-400 text-sm">View and edit guest list</p>
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              to={`/events/${eventId}/scanner`}
-              className="glass-dark p-6 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 group"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-green-600/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                          <QrCode className="w-6 h-6 text-green-400" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold mb-1">QR Scanner</h3>
-                  <p className="text-gray-400 text-sm">Scan guest QR codes</p>
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              to={`/events/${eventId}/qr-generator`}
-              className="glass-dark p-6 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 group"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-purple-600/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                                          <QrCode className="w-6 h-6 text-purple-400" />
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold mb-1">Generate QR</h3>
-                  <p className="text-gray-400 text-sm">Create guest QR codes</p>
-                </div>
-              </div>
-            </Link>
+          {/* Events Table */}
+          <div className="glass-dark rounded-2xl border border-white/10 overflow-hidden">
+            <div className="p-6 border-b border-white/10">
+              <h3 className="text-xl font-semibold text-white flex items-center">
+                <Eye className="w-5 h-5 mr-2 text-green-400" />
+                Event Details
+              </h3>
+              <p className="text-gray-400 text-sm mt-1">Detailed breakdown of each event</p>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-white/5">
+                  <tr>
+                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Event</th>
+                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Date</th>
+                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Guests</th>
+                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Check-ins</th>
+                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Rate</th>
+                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    [...Array(4)].map((_, i) => (
+                      <tr key={i} className="border-t border-white/10">
+                        <td className="py-4 px-6">
+                          <div className="animate-pulse bg-gray-600 h-4 w-32 rounded"></div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="animate-pulse bg-gray-600 h-4 w-24 rounded"></div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="animate-pulse bg-gray-600 h-4 w-20 rounded"></div>
+                        </td>
+                        <td className="py-4 px-6">
+                          <div className="animate-pulse bg-gray-600 h-6 w-16 rounded"></div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : events.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="py-12 text-center">
+                        <Calendar className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-400 text-lg">No events found</p>
+                        <p className="text-gray-500 text-sm">Create your first event to see statistics</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    events.map((event) => {
+                      const eventDate = event.date ? new Date(event.date) : new Date();
+                      const isUpcoming = eventDate > new Date();
+                      
+                      return (
+                        <tr key={event.id} className="border-t border-white/10 hover:bg-white/5 transition-all">
+                          <td className="py-4 px-6">
+                            <div>
+                              <p className="text-white font-medium">{event.name || 'Unnamed Event'}</p>
+                              <p className="text-gray-400 text-sm">{event.location || 'No location'}</p>
+                            </div>
+                          </td>
+                          
+                          <td className="py-4 px-6">
+                            <p className="text-gray-300 text-sm">
+                              {event.date ? new Date(event.date).toLocaleDateString() : 'No date'}
+                            </p>
+                            <p className="text-gray-500 text-xs">{event.time || 'No time'}</p>
+                          </td>
+                          
+                          <td className="py-4 px-6">
+                            <span className="text-white font-medium">
+                              {event.totalGuests || 0}
+                            </span>
+                          </td>
+                          
+                          <td className="py-4 px-6">
+                            <span className="text-green-400 font-medium">
+                              {event.checkedInGuests || 0}
+                            </span>
+                          </td>
+                          
+                          <td className="py-4 px-6">
+                            <div className="flex items-center space-x-3">
+                              <div className="flex-1 bg-gray-700 rounded-full h-2 w-16">
+                                <div 
+                                  className={`h-2 rounded-full transition-all duration-500 ${
+                                    event.attendanceRate >= 80 ? 'bg-green-500' :
+                                    event.attendanceRate >= 60 ? 'bg-yellow-500' :
+                                    event.attendanceRate >= 40 ? 'bg-orange-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${Math.min(event.attendanceRate || 0, 100)}%` }}
+                                ></div>
+                              </div>
+                              <span className={`text-sm font-medium ${
+                                event.attendanceRate >= 80 ? 'text-green-400' :
+                                event.attendanceRate >= 60 ? 'text-yellow-400' :
+                                event.attendanceRate >= 40 ? 'text-orange-400' : 'text-red-400'
+                              }`}>
+                                {event.attendanceRate || 0}%
+                              </span>
+                            </div>
+                          </td>
+                          
+                          <td className="py-4 px-6">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              isUpcoming ? 'bg-blue-600/20 text-blue-400' : 'bg-gray-600/20 text-gray-400'
+                            }`}>
+                              {isUpcoming ? 'Upcoming' : 'Completed'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </main>
       </div>

@@ -8,7 +8,6 @@ import {
   Users, 
   BarChart3, 
   FileText, 
-  Play,
   ChevronLeft,
   ChevronRight,
   Crown,
@@ -17,7 +16,10 @@ import {
   Calendar,
   QrCode,
   Camera,
-  TrendingUp
+  TrendingUp,
+  PieChart,
+  Activity,
+  Bell
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -30,49 +32,68 @@ const Sidebar = () => {
       icon: <Home className="w-5 h-5" />,
       label: 'Dashboard',
       path: '/dashboard',
-      roles: ['owner', 'admin']
+      roles: ['owner', 'admin'],
+      category: 'main'
     },
     {
       icon: <Calendar className="w-5 h-5" />,
       label: 'Events',
       path: '/events',
-      roles: ['owner', 'admin']
+      roles: ['owner', 'admin'],
+      category: 'main'
     },
     {
-      icon: <QrCode className="w-5 h-5" />,
+      icon: <Camera className="w-5 h-5" />,
       label: 'QR Scanner',
       path: '/scanner',
-      roles: ['owner', 'admin']
+      roles: ['owner', 'admin'],
+      category: 'main'
     },
     {
       icon: <TrendingUp className="w-5 h-5" />,
       label: 'Statistics',
       path: '/stats',
-      roles: ['owner', 'admin']
+      roles: ['owner', 'admin'],
+      category: 'analytics'
     },
     {
       icon: <BarChart3 className="w-5 h-5" />,
       label: 'Analytics',
       path: '/analytics',
-      roles: ['owner', 'admin']
+      roles: ['owner', 'admin'],
+      category: 'analytics'
     },
+    // NEW: Reports Page
+    {
+      icon: <PieChart className="w-5 h-5" />,
+      label: 'Reports',
+      path: '/reports',
+      roles: ['owner', 'admin'],
+      category: 'analytics',
+      badge: 'New'
+    },
+    // NEW: Users Management (Owner Only)
     {
       icon: <Users className="w-5 h-5" />,
       label: 'Users',
       path: '/users',
-      roles: ['owner']
+      roles: ['owner'],
+      category: 'management',
+      badge: 'New'
     },
     {
       icon: <FileText className="w-5 h-5" />,
-      label: 'Reports',
-      path: '/reports',
-      roles: ['owner', 'admin']
+      label: 'Reports (Old)',
+      path: '/reports-old',
+      roles: ['owner', 'admin'],
+      category: 'management'
     },
     {
       icon: <Settings className="w-5 h-5" />,
       label: 'Settings',
       path: '/settings',
-      roles: ['owner']
+      roles: ['owner', 'admin'],
+      category: 'system'
     }
   ];
 
@@ -80,6 +101,23 @@ const Sidebar = () => {
   const filteredMenuItems = menuItems.filter(item => 
     item.roles.includes(userRole)
   );
+
+  // Group menu items by category
+  const groupedMenuItems = filteredMenuItems.reduce((acc, item) => {
+    const category = item.category || 'main';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(item);
+    return acc;
+  }, {});
+
+  const categoryLabels = {
+    main: 'Main',
+    analytics: 'Analytics',
+    management: 'Management', 
+    system: 'System'
+  };
 
   const getRoleIcon = (role) => {
     switch (role) {
@@ -137,40 +175,98 @@ const Sidebar = () => {
           <div className={`inline-flex items-center space-x-2 px-3 py-2 rounded-lg border text-xs font-medium ${getRoleBadgeColor(userRole)}`}>
             {getRoleIcon(userRole)}
             <span className="capitalize">{userRole}</span>
+            {userRole === 'owner' && (
+              <span className="ml-1 px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 text-xs rounded">
+                Pro
+              </span>
+            )}
           </div>
         </div>
       )}
 
       {/* Navigation Menu */}
-      <nav className="flex-1 p-4 space-y-2 hide-scrollbar overflow-y-auto">
-        {filteredMenuItems.map((item, index) => {
-          const isActive = location.pathname === item.path;
-          
-          return (
-            <Link
-              key={index}
-              to={item.path}
-              className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
-                isActive 
-                  ? 'netflix-gradient text-white shadow-lg' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              <div className={`${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
-                {item.icon}
+      <nav className="flex-1 p-4 space-y-6 hide-scrollbar overflow-y-auto">
+        {Object.entries(groupedMenuItems).map(([category, items]) => (
+          <div key={category}>
+            {/* Category Label */}
+            {!isCollapsed && items.length > 0 && (
+              <div className="mb-3">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-2">
+                  {categoryLabels[category]}
+                </h3>
               </div>
-              {!isCollapsed && (
-                <span className="font-medium">{item.label}</span>
-              )}
-              
-              {/* Active indicator */}
-              {isActive && !isCollapsed && (
-                <div className="ml-auto w-2 h-2 bg-white rounded-full animate-pulse"></div>
-              )}
-            </Link>
-          );
-        })}
+            )}
+            
+            {/* Menu Items */}
+            <div className="space-y-1">
+              {items.map((item, index) => {
+                const isActive = location.pathname === item.path;
+                
+                return (
+                  <Link
+                    key={index}
+                    to={item.path}
+                    className={`relative flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
+                      isActive 
+                        ? 'netflix-gradient text-white shadow-lg' 
+                        : 'text-gray-400 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <div className={`${isActive ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
+                      {item.icon}
+                    </div>
+                    
+                    {!isCollapsed && (
+                      <>
+                        <span className="font-medium flex-1">{item.label}</span>
+                        
+                        {/* Badge for new features */}
+                        {item.badge && (
+                          <span className="px-2 py-1 bg-red-600 text-white text-xs rounded-full animate-pulse">
+                            {item.badge}
+                          </span>
+                        )}
+                        
+                        {/* Active indicator */}
+                        {isActive && (
+                          <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                        )}
+                      </>
+                    )}
+                    
+                    {/* Tooltip for collapsed state */}
+                    {isCollapsed && (
+                      <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                        {item.label}
+                        {item.badge && (
+                          <span className="ml-2 px-1.5 py-0.5 bg-red-600 text-xs rounded">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
+
+      {/* Notifications Badge */}
+      {!isCollapsed && (
+        <div className="p-4 border-t border-white/10">
+          <div className="flex items-center justify-between p-3 bg-blue-600/10 border border-blue-600/20 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Bell className="w-4 h-4 text-blue-400" />
+              <span className="text-blue-400 text-sm font-medium">Updates</span>
+            </div>
+            <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">
+              3
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Collapse Button */}
       <div className="p-4 border-t border-white/10">
@@ -179,7 +275,13 @@ const Sidebar = () => {
           className="w-full flex items-center justify-center space-x-2 px-4 py-3 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-300 group"
         >
           {isCollapsed ? (
-            <ChevronRight className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            <>
+              <ChevronRight className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              {/* Tooltip for collapsed state */}
+              <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                Expand Menu
+              </div>
+            </>
           ) : (
             <>
               <ChevronLeft className="w-5 h-5 group-hover:scale-110 transition-transform" />
