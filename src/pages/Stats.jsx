@@ -1,28 +1,25 @@
-// src/pages/Stats.jsx
+// src/pages/Stats.jsx - REAL-TIME VERSION
 import React, { useState, useEffect } from 'react';
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  where,
+  getDocs
+} from 'firebase/firestore';
+import { db } from '../firebase/firebase-config';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Users,
-  Calendar,
-  CheckCircle,
-  Clock,
-  ArrowUp,
-  ArrowDown,
-  Download,
-  RefreshCw,
-  Activity,
-  Eye,
-  AlertCircle
-} from 'lucide-react';
+import { showToast } from '../utils/toast';
 import {
-  BarChart,
-  Bar,
   LineChart,
   Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
   PieChart,
   Pie,
   Cell,
@@ -33,149 +30,320 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
-import { exportEventStatsToCSV } from '../utils/csv';
-import { showToast } from '../utils/toast';
+import { 
+  BarChart3, 
+  TrendingUp, 
+  Calendar,
+  Download,
+  RefreshCw,
+  Users,
+  CheckCircle,
+  Clock,
+  PieChart as PieIcon,
+  Activity,
+  ArrowUp,
+  ArrowDown,
+  AlertCircle,
+  Eye,
+  UserCheck,
+  Star
+} from 'lucide-react';
 
 const Stats = () => {
-  const { userRole } = useAuth();
+  const { userRole, currentUser } = useAuth();
+  const [events, setEvents] = useState([]);
+  const [allGuests, setAllGuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
+  const [realTimeStats, setRealTimeStats] = useState({
     totalEvents: 0,
     totalGuests: 0,
     totalCheckIns: 0,
-    upcomingEvents: 0
+    upcomingEvents: 0,
+    averageAttendance: 0,
+    topEvent: null
   });
-  const [events, setEvents] = useState([]);
-  const [chartData, setChartData] = useState([]);
 
-  // Mock data loader with null checking
-  const loadData = React.useCallback(async () => {
+  // Real-time data loading
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const unsubscribers = [];
+
     try {
-      setLoading(true);
-      setError(null);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Mock events data with proper null checking
-      const mockEvents = [
-        {
-          id: '1',
-          name: 'Tech Conference 2024',
-          date: '2024-12-15',
-          time: '09:00',
-          location: 'Convention Center',
-          totalGuests: 250,
-          checkedInGuests: 187,
-          status: 'upcoming',
-          createdAt: new Date().toISOString()
+      // Listen to events in real-time
+      const eventsQuery = userRole === 'owner' 
+        ? query(collection(db, 'events'), orderBy('createdAt', 'desc'))
+        : query(
+            collection(db, 'events'), 
+            where('createdBy', '==', currentUser.uid),
+            orderBy('createdAt', 'desc')
+          );
+
+      const unsubscribeEvents = onSnapshot(eventsQuery, 
+        (snapshot) => {
+          const eventsData = [];
+          snapshot.forEach((doc) => {
+            const eventData = { id: doc.id, ...doc.data() };
+            eventsData.push(eventData);
+          });
+          setEvents(eventsData);
+          
+          // Load guests for each event
+          loadGuestsForEvents(eventsData);
         },
-        {
-          id: '2', 
-          name: 'Annual Meetup',
-          date: '2024-12-20',
-          time: '14:00',
-          location: 'Hotel Ballroom',
-          totalGuests: 150,
-          checkedInGuests: 142,
-          status: 'upcoming',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '3',
-          name: 'Workshop Series',
-          date: '2024-11-25',
-          time: '10:00', 
-          location: 'Training Center',
-          totalGuests: 80,
-          checkedInGuests: 75,
-          status: 'completed',
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '4',
-          name: 'Networking Event',
-          date: '2024-11-30',
-          time: '18:00',
-          location: 'Rooftop Venue',
-          totalGuests: 120,
-          checkedInGuests: 98,
-          status: 'completed',
-          createdAt: new Date().toISOString()
+        (error) => {
+          console.error('Error fetching events:', error);
+          setError('Failed to load events data');
+          setLoading(false);
         }
-      ];
+      );
 
-      // Process events with null safety
-      const processedEvents = mockEvents.map(event => ({
-        ...event,
-        date: event.date || new Date().toISOString().split('T')[0],
-        attendanceRate: event.totalGuests && event.totalGuests > 0 ? 
-          Math.round((event.checkedInGuests || 0) / event.totalGuests * 100) : 0
-      }));
-
-      // Calculate stats with null checking
-      const totalEvents = processedEvents.length;
-      const totalGuests = processedEvents.reduce((sum, event) => sum + (event.totalGuests || 0), 0);
-      const totalCheckIns = processedEvents.reduce((sum, event) => sum + (event.checkedInGuests || 0), 0);
-      const upcomingEvents = processedEvents.filter(event => {
-        if (!event.date) return false;
-        try {
-          return new Date(event.date) > new Date();
-        } catch {
-          return false;
-        }
-      }).length;
-
-      // Create chart data with null safety
-      const chartDataProcessed = processedEvents.map(event => ({
-        name: event.name ? (event.name.length > 15 ? event.name.substring(0, 15) + '...' : event.name) : 'Unnamed Event',
-        guests: event.totalGuests || 0,
-        checkIns: event.checkedInGuests || 0,
-        rate: event.attendanceRate || 0
-      }));
-
-      setStats({
-        totalEvents,
-        totalGuests,
-        totalCheckIns,
-        upcomingEvents
-      });
-
-      setEvents(processedEvents);
-      setChartData(chartDataProcessed);
+      unsubscribers.push(unsubscribeEvents);
       
     } catch (err) {
-      console.error('Error loading stats:', err);
-      setError('Failed to load statistics data');
-      showToast('Failed to load statistics', 'error');
-    } finally {
+      console.error('Error setting up real-time listeners:', err);
+      setError('Failed to initialize real-time data');
       setLoading(false);
     }
-  }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe());
+    };
+  }, [currentUser, userRole]);
 
-  const handleExportStats = () => {
+  // Load guests for all events and calculate stats
+  const loadGuestsForEvents = async (eventsData) => {
     try {
-      if (events.length === 0) {
-        showToast('No data to export', 'warning');
-        return;
+      const allGuestsData = [];
+      
+      for (const event of eventsData) {
+        try {
+          const guestsQuery = query(
+            collection(db, 'events', event.id, 'guests'),
+            orderBy('createdAt', 'desc')
+          );
+          
+          const guestsSnapshot = await getDocs(guestsQuery);
+          
+          guestsSnapshot.forEach((doc) => {
+            const guestData = { 
+              id: doc.id, 
+              eventId: event.id, 
+              eventName: event.name,
+              eventDate: event.date,
+              ...doc.data() 
+            };
+            allGuestsData.push(guestData);
+          });
+        } catch (error) {
+          console.warn(`Failed to load guests for event ${event.id}:`, error);
+        }
       }
       
-      exportEventStatsToCSV(events, 'event_statistics');
+      setAllGuests(allGuestsData);
+      calculateRealTimeStats(eventsData, allGuestsData);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error loading guests:', err);
+      setError('Failed to load guests data');
+      setLoading(false);
+    }
+  };
+
+  // Calculate real-time statistics
+  const calculateRealTimeStats = (eventsData, guestsData) => {
+    const totalEvents = eventsData.length;
+    const totalGuests = guestsData.length;
+    const totalCheckIns = guestsData.filter(g => g.checkedIn).length;
+    
+    const upcomingEvents = eventsData.filter(event => {
+      if (!event.date) return false;
+      try {
+        const eventDate = new Date(event.date);
+        return eventDate > new Date();
+      } catch {
+        return false;
+      }
+    }).length;
+
+    const averageAttendance = totalGuests > 0 
+      ? Math.round((totalCheckIns / totalGuests) * 100) 
+      : 0;
+
+    // Find top performing event
+    const eventStats = eventsData.map(event => {
+      const eventGuests = guestsData.filter(g => g.eventId === event.id);
+      const eventCheckIns = eventGuests.filter(g => g.checkedIn).length;
+      const attendanceRate = eventGuests.length > 0 
+        ? Math.round((eventCheckIns / eventGuests.length) * 100) 
+        : 0;
+      
+      return {
+        ...event,
+        guestCount: eventGuests.length,
+        checkInCount: eventCheckIns,
+        attendanceRate
+      };
+    });
+
+    const topEvent = eventStats.reduce((top, current) => 
+      (current.attendanceRate > (top?.attendanceRate || 0)) ? current : top, 
+      null
+    );
+
+    setRealTimeStats({
+      totalEvents,
+      totalGuests,
+      totalCheckIns,
+      upcomingEvents,
+      averageAttendance,
+      topEvent
+    });
+  };
+
+  // Process chart data
+  const getChartData = () => {
+    if (!events.length) return { attendanceData: [], categoryData: [], timelineData: [] };
+
+    // Attendance data for bar chart
+    const attendanceData = events.map(event => {
+      const eventGuests = allGuests.filter(g => g.eventId === event.id);
+      const eventCheckIns = eventGuests.filter(g => g.checkedIn).length;
+      
+      return {
+        name: event.name?.substring(0, 15) + '...' || 'Unnamed Event',
+        fullName: event.name || 'Unnamed Event',
+        guests: eventGuests.length,
+        checkIns: eventCheckIns,
+        rate: eventGuests.length > 0 ? Math.round((eventCheckIns / eventGuests.length) * 100) : 0,
+        date: event.date || new Date().toISOString().split('T')[0]
+      };
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Category distribution for pie chart
+    const categoryStats = events.reduce((acc, event) => {
+      const category = event.category || 'Other';
+      acc[category] = (acc[category] || 0) + 1;
+      return acc;
+    }, {});
+
+    const categoryData = Object.entries(categoryStats).map(([category, count]) => ({
+      name: category,
+      value: count,
+      percentage: Math.round((count / events.length) * 100)
+    }));
+
+    // Timeline data for check-ins over time
+    const checkInsByDate = allGuests
+      .filter(g => g.checkedIn && g.checkInTime)
+      .reduce((acc, guest) => {
+        const date = new Date(guest.checkInTime).toDateString();
+        acc[date] = (acc[date] || 0) + 1;
+        return acc;
+      }, {});
+
+    const timelineData = Object.entries(checkInsByDate)
+      .map(([date, count]) => ({
+        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        checkIns: count,
+        fullDate: date
+      }))
+      .sort((a, b) => new Date(a.fullDate) - new Date(b.fullDate))
+      .slice(-7); // Last 7 days
+
+    return { attendanceData, categoryData, timelineData };
+  };
+
+  const { attendanceData, categoryData, timelineData } = getChartData();
+
+  // Colors for charts
+  const CHART_COLORS = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EF4444', '#06B6D4'];
+
+  // Statistics cards data
+  const statsCards = [
+    {
+      title: 'Total Events',
+      value: realTimeStats.totalEvents,
+      change: '+12%',
+      trend: 'up',
+      icon: <Calendar className="w-6 h-6" />,
+      color: 'bg-blue-600/20',
+      textColor: 'text-blue-400'
+    },
+    {
+      title: 'Total Guests',
+      value: realTimeStats.totalGuests,
+      change: '+8%',
+      trend: 'up',
+      icon: <Users className="w-6 h-6" />,
+      color: 'bg-green-600/20',
+      textColor: 'text-green-400'
+    },
+    {
+      title: 'Check-ins',
+      value: realTimeStats.totalCheckIns,
+      change: '+15%',
+      trend: 'up',
+      icon: <CheckCircle className="w-6 h-6" />,
+      color: 'bg-purple-600/20',
+      textColor: 'text-purple-400'
+    },
+    {
+      title: 'Upcoming Events',
+      value: realTimeStats.upcomingEvents,
+      change: '+5%',
+      trend: 'up',
+      icon: <Clock className="w-6 h-6" />,
+      color: 'bg-orange-600/20',
+      textColor: 'text-orange-400'
+    }
+  ];
+
+  // Handle refresh
+  const handleRefresh = () => {
+    setLoading(true);
+    setError(null);
+    showToast('Refreshing statistics...', 'info');
+    // Reload data
+    window.location.reload();
+  };
+
+  // Handle export
+  const handleExport = () => {
+    try {
+      const exportData = {
+        summary: realTimeStats,
+        chartData: {
+          attendance: attendanceData,
+          categories: categoryData,
+          timeline: timelineData
+        },
+        events: events.map(event => ({
+          id: event.id,
+          name: event.name,
+          date: event.date,
+          category: event.category,
+          guestCount: allGuests.filter(g => g.eventId === event.id).length,
+          checkInCount: allGuests.filter(g => g.eventId === event.id && g.checkedIn).length
+        })),
+        exportDate: new Date().toISOString()
+      };
+
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `event-statistics-${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
       showToast('Statistics exported successfully!', 'success');
     } catch (error) {
       console.error('Export error:', error);
       showToast('Failed to export statistics', 'error');
     }
-  };
-
-  const handleRefresh = () => {
-    loadData();
-    showToast('Statistics refreshed!', 'info');
   };
 
   if (userRole === 'client') {
@@ -230,21 +398,22 @@ const Stats = () => {
                 Event Statistics
               </h1>
               <p className="text-gray-400">
-                Overview of your event performance and metrics
+                Real-time overview of your event performance and metrics
               </p>
             </div>
             
             <div className="flex items-center space-x-3">
-              <button
+              <button 
                 onClick={handleRefresh}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all duration-200"
+                disabled={loading}
+                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
               </button>
               
-              <button
-                onClick={handleExportStats}
+              <button 
+                onClick={handleExport}
                 className="flex items-center space-x-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-all duration-200"
               >
                 <Download className="w-4 h-4" />
@@ -253,53 +422,24 @@ const Stats = () => {
             </div>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[
-              {
-                title: 'Total Events',
-                value: stats.totalEvents,
-                change: '+12%',
-                trend: 'up',
-                icon: <Calendar className="w-5 h-5" />
-              },
-              {
-                title: 'Total Guests',
-                value: stats.totalGuests,
-                change: '+8%',
-                trend: 'up',
-                icon: <Users className="w-5 h-5" />
-              },
-              {
-                title: 'Check-ins',
-                value: stats.totalCheckIns,
-                change: '+15%',
-                trend: 'up',
-                icon: <CheckCircle className="w-5 h-5" />
-              },
-              {
-                title: 'Upcoming Events',
-                value: stats.upcomingEvents,
-                change: '+5%',
-                trend: 'up',
-                icon: <Clock className="w-5 h-5" />
-              }
-            ].map((stat, index) => (
-              <div key={index} className="glass-dark p-6 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 group">
-                {loading ? (
-                  <div className="animate-pulse">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="text-center">
+                <RefreshCw className="w-12 h-12 text-blue-400 mx-auto mb-4 animate-spin" />
+                <p className="text-gray-400">Loading real-time statistics...</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {statsCards.map((stat, index) => (
+                  <div key={index} className="glass-dark p-6 rounded-2xl border border-white/10 hover:border-white/20 transition-all duration-300 group">
                     <div className="flex items-center justify-between mb-4">
-                      <div className="w-12 h-12 bg-gray-600 rounded-xl"></div>
-                      <div className="w-16 h-4 bg-gray-600 rounded"></div>
-                    </div>
-                    <div className="w-20 h-8 bg-gray-600 rounded mb-2"></div>
-                    <div className="w-24 h-4 bg-gray-600 rounded"></div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="p-3 bg-blue-600/20 rounded-xl group-hover:scale-110 transition-transform">
-                        {stat.icon}
+                      <div className={`p-3 ${stat.color} rounded-xl group-hover:scale-110 transition-transform`}>
+                        <div className={stat.textColor}>
+                          {stat.icon}
+                        </div>
                       </div>
                       <div className={`flex items-center space-x-1 text-sm ${
                         stat.trend === 'up' ? 'text-green-400' : 'text-red-400'
@@ -314,48 +454,134 @@ const Stats = () => {
                     
                     <div>
                       <p className="text-3xl font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">
-                        {stat.value.toLocaleString()}
+                        {stat.value}
                       </p>
                       <p className="text-gray-400 text-sm">{stat.title}</p>
                     </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Charts */}
-          <div className="grid lg:grid-cols-2 gap-8 mb-8">
-            {/* Bar Chart */}
-            <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-white flex items-center">
-                  <BarChart3 className="w-5 h-5 mr-2 text-blue-400" />
-                  Event Attendance
-                </h3>
-                <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-                  View Details
-                </button>
-              </div>
-              
-              <div className="h-80">
-                {loading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="loading-spinner"></div>
                   </div>
-                ) : chartData.length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <BarChart3 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400">No data available</p>
+                ))}
+              </div>
+
+              {/* Top Performance Card */}
+              {realTimeStats.topEvent && (
+                <div className="glass-dark p-6 rounded-2xl border border-white/10 mb-8">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-semibold text-white mb-2 flex items-center">
+                        <Star className="w-5 h-5 mr-2 text-yellow-400" />
+                        Top Performing Event
+                      </h3>
+                      <p className="text-2xl font-bold text-yellow-400 mb-1">
+                        {realTimeStats.topEvent.name}
+                      </p>
+                      <p className="text-gray-400">
+                        {realTimeStats.topEvent.attendanceRate}% attendance rate • 
+                        {realTimeStats.topEvent.checkInCount} of {realTimeStats.topEvent.guestCount} guests checked in
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-yellow-400">
+                        {realTimeStats.topEvent.attendanceRate}%
+                      </div>
+                      <p className="text-gray-400 text-sm">Attendance Rate</p>
                     </div>
                   </div>
-                ) : (
+                </div>
+              )}
+
+              {/* Charts Grid */}
+              <div className="grid lg:grid-cols-2 gap-8 mb-8">
+                {/* Event Attendance Chart */}
+                <div className="glass-dark p-6 rounded-2xl border border-white/10">
+                  <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2 text-blue-400" />
+                    Event Attendance
+                  </h3>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={attendanceData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis 
+                          dataKey="name" 
+                          stroke="#9CA3AF"
+                          fontSize={12}
+                        />
+                        <YAxis stroke="#9CA3AF" fontSize={12} />
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#F9FAFB'
+                          }}
+                          formatter={(value, name) => [
+                            value,
+                            name === 'guests' ? 'Total Guests' : 
+                            name === 'checkIns' ? 'Checked In' : name
+                          ]}
+                          labelFormatter={(label) => {
+                            const event = attendanceData.find(e => e.name === label);
+                            return event ? event.fullName : label;
+                          }}
+                        />
+                        <Legend />
+                        <Bar dataKey="guests" fill="#3B82F6" name="Total Guests" />
+                        <Bar dataKey="checkIns" fill="#10B981" name="Checked In" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Event Categories */}
+                <div className="glass-dark p-6 rounded-2xl border border-white/10">
+                  <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+                    <PieIcon className="w-5 h-5 mr-2 text-purple-400" />
+                    Event Categories
+                  </h3>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={categoryData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({name, percentage}) => `${name} ${percentage}%`}
+                          outerRadius={100}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {categoryData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#F9FAFB'
+                          }}
+                        />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              {/* Check-ins Timeline */}
+              <div className="glass-dark p-6 rounded-2xl border border-white/10 mb-8">
+                <h3 className="text-xl font-semibold text-white mb-6 flex items-center">
+                  <TrendingUp className="w-5 h-5 mr-2 text-green-400" />
+                  Check-ins Over Time (Last 7 Days)
+                </h3>
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
+                    <AreaChart data={timelineData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                       <XAxis 
-                        dataKey="name" 
+                        dataKey="date" 
                         stroke="#9CA3AF"
                         fontSize={12}
                       />
@@ -368,195 +594,98 @@ const Stats = () => {
                           color: '#F9FAFB'
                         }}
                       />
-                      <Legend />
-                      <Bar dataKey="guests" fill="#3B82F6" name="Total Guests" />
-                      <Bar dataKey="checkIns" fill="#10B981" name="Check-ins" />
-                    </BarChart>
+                      <Area
+                        type="monotone"
+                        dataKey="checkIns"
+                        stroke="#10B981"
+                        fill="url(#colorCheckIns)"
+                        strokeWidth={2}
+                      />
+                      <defs>
+                        <linearGradient id="colorCheckIns" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                        </linearGradient>
+                      </defs>
+                    </AreaChart>
                   </ResponsiveContainer>
-                )}
+                </div>
               </div>
-            </div>
 
-            {/* Pie Chart */}
-            <div className="glass-dark p-6 rounded-2xl border border-white/10">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-white flex items-center">
-                  <Activity className="w-5 h-5 mr-2 text-purple-400" />
-                  Attendance Rate
-                </h3>
-                <button className="text-purple-400 hover:text-purple-300 text-sm font-medium">
-                  View Details
-                </button>
-              </div>
-              
-              <div className="h-80">
-                {loading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="loading-spinner"></div>
-                  </div>
-                ) : chartData.length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <Activity className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400">No data available</p>
+              {/* Summary Insights */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="glass-dark p-6 rounded-2xl border border-white/10">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    <Activity className="w-5 h-5 mr-2 text-orange-400" />
+                    Key Insights
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                      <span className="text-gray-400">Average Attendance</span>
+                      <span className="text-white font-semibold">{realTimeStats.averageAttendance}%</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                      <span className="text-gray-400">Total Check-in Rate</span>
+                      <span className="text-green-400 font-semibold">
+                        {realTimeStats.totalGuests > 0 
+                          ? Math.round((realTimeStats.totalCheckIns / realTimeStats.totalGuests) * 100)
+                          : 0
+                        }%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                      <span className="text-gray-400">Events This Month</span>
+                      <span className="text-blue-400 font-semibold">
+                        {events.filter(e => {
+                          if (!e.date) return false;
+                          const eventDate = new Date(e.date);
+                          const now = new Date();
+                          return eventDate.getMonth() === now.getMonth() && 
+                                 eventDate.getFullYear() === now.getFullYear();
+                        }).length}
+                      </span>
                     </div>
                   </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={chartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, rate }) => `${name}: ${rate}%`}
-                        outerRadius={120}
-                        fill="#8884d8"
-                        dataKey="rate"
-                      >
-                        {chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={`hsl(${index * 45}, 70%, 60%)`} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{
-                          backgroundColor: '#1F2937',
-                          border: '1px solid #374151',
-                          borderRadius: '8px',
-                          color: '#F9FAFB'
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </div>
-          </div>
+                </div>
 
-          {/* Events Table */}
-          <div className="glass-dark rounded-2xl border border-white/10 overflow-hidden">
-            <div className="p-6 border-b border-white/10">
-              <h3 className="text-xl font-semibold text-white flex items-center">
-                <Eye className="w-5 h-5 mr-2 text-green-400" />
-                Event Details
-              </h3>
-              <p className="text-gray-400 text-sm mt-1">Detailed breakdown of each event</p>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-white/5">
-                  <tr>
-                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Event</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Date</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Guests</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Check-ins</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Rate</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    [...Array(4)].map((_, i) => (
-                      <tr key={i} className="border-t border-white/10">
-                        <td className="py-4 px-6">
-                          <div className="animate-pulse bg-gray-600 h-4 w-32 rounded"></div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="animate-pulse bg-gray-600 h-4 w-24 rounded"></div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="animate-pulse bg-gray-600 h-4 w-16 rounded"></div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="animate-pulse bg-gray-600 h-4 w-20 rounded"></div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="animate-pulse bg-gray-600 h-6 w-16 rounded"></div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : events.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="py-12 text-center">
-                        <Calendar className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                        <p className="text-gray-400 text-lg">No events found</p>
-                        <p className="text-gray-500 text-sm">Create your first event to see statistics</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    events.map((event) => {
-                      const eventDate = event.date ? new Date(event.date) : new Date();
-                      const isUpcoming = eventDate > new Date();
-                      
-                      return (
-                        <tr key={event.id} className="border-t border-white/10 hover:bg-white/5 transition-all">
-                          <td className="py-4 px-6">
-                            <div>
-                              <p className="text-white font-medium">{event.name || 'Unnamed Event'}</p>
-                              <p className="text-gray-400 text-sm">{event.location || 'No location'}</p>
-                            </div>
-                          </td>
-                          
-                          <td className="py-4 px-6">
-                            <p className="text-gray-300 text-sm">
-                              {event.date ? new Date(event.date).toLocaleDateString() : 'No date'}
+                <div className="glass-dark p-6 rounded-2xl border border-white/10">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                    <UserCheck className="w-5 h-5 mr-2 text-green-400" />
+                    Recent Activity
+                  </h3>
+                  <div className="space-y-3 max-h-48 overflow-y-auto">
+                    {allGuests
+                      .filter(guest => guest.checkedIn && guest.checkInTime)
+                      .sort((a, b) => new Date(b.checkInTime) - new Date(a.checkInTime))
+                      .slice(0, 5)
+                      .map((guest, index) => (
+                        <div key={index} className="flex items-center space-x-3 p-2 hover:bg-white/5 rounded-lg transition-colors">
+                          <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-white font-medium text-sm">{guest.name}</p>
+                            <p className="text-gray-400 text-xs">{guest.eventName}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-gray-400 text-xs">
+                              {new Date(guest.checkInTime).toLocaleTimeString()}
                             </p>
-                            <p className="text-gray-500 text-xs">{event.time || 'No time'}</p>
-                          </td>
-                          
-                          <td className="py-4 px-6">
-                            <span className="text-white font-medium">
-                              {event.totalGuests || 0}
-                            </span>
-                          </td>
-                          
-                          <td className="py-4 px-6">
-                            <span className="text-green-400 font-medium">
-                              {event.checkedInGuests || 0}
-                            </span>
-                          </td>
-                          
-                          <td className="py-4 px-6">
-                            <div className="flex items-center space-x-3">
-                              <div className="flex-1 bg-gray-700 rounded-full h-2 w-16">
-                                <div 
-                                  className={`h-2 rounded-full transition-all duration-500 ${
-                                    event.attendanceRate >= 80 ? 'bg-green-500' :
-                                    event.attendanceRate >= 60 ? 'bg-yellow-500' :
-                                    event.attendanceRate >= 40 ? 'bg-orange-500' : 'bg-red-500'
-                                  }`}
-                                  style={{ width: `${Math.min(event.attendanceRate || 0, 100)}%` }}
-                                ></div>
-                              </div>
-                              <span className={`text-sm font-medium ${
-                                event.attendanceRate >= 80 ? 'text-green-400' :
-                                event.attendanceRate >= 60 ? 'text-yellow-400' :
-                                event.attendanceRate >= 40 ? 'text-orange-400' : 'text-red-400'
-                              }`}>
-                                {event.attendanceRate || 0}%
-                              </span>
-                            </div>
-                          </td>
-                          
-                          <td className="py-4 px-6">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              isUpcoming ? 'bg-blue-600/20 text-blue-400' : 'bg-gray-600/20 text-gray-400'
-                            }`}>
-                              {isUpcoming ? 'Upcoming' : 'Completed'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                          </div>
+                        </div>
+                      ))
+                    }
+                    {allGuests.filter(g => g.checkedIn).length === 0 && (
+                      <div className="text-center py-8">
+                        <UserCheck className="w-12 h-12 text-gray-600 mx-auto mb-2" />
+                        <p className="text-gray-400 text-sm">No recent check-ins</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>
