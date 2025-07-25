@@ -1,4 +1,4 @@
-// src/App.js
+// src/App.js - FIXED VERSION
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -164,9 +164,9 @@ const AppRouter = () => {
         } 
       />
       
-      {/* Protected Routes - QR & Scanning */}
+      {/* 🔧 FIXED: QR Scanner Routes with eventId parameter */}
       <Route 
-        path="/scanner" 
+        path="/events/:eventId/scanner" 
         element={
           <ProtectedRoute allowedRoles={['owner', 'admin']}>
             <QRScanner />
@@ -174,10 +174,28 @@ const AppRouter = () => {
         } 
       />
       <Route 
-        path="/stats" 
+        path="/events/:eventId/stats" 
         element={
           <ProtectedRoute allowedRoles={['owner', 'admin']}>
             <Stats />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* 🚨 FALLBACK: Legacy scanner route (redirects to events) */}
+      <Route 
+        path="/scanner" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Navigate to="/events" replace />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/stats" 
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <Navigate to="/events" replace />
           </ProtectedRoute>
         } 
       />
