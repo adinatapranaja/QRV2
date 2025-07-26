@@ -1,17 +1,12 @@
 // ===================================================
-// SIMPLE QR SCANNER FIX - GUARANTEED WORKING SOLUTION
+// UI/UX LAYOUT FIX - COMPLETE RESPONSIVE DESIGN (FIXED)
 // ===================================================
 
-// STEP 1: Install alternative library
-// npm uninstall html5-qrcode
-// npm install qr-scanner --save
-
-// STEP 2: Replace QRScanner.jsx with this working version
-// src/pages/QRScanner.jsx - SIMPLE & WORKING
+// src/pages/QRScanner.jsx - FIXED UI/UX VERSION
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import QrScanner from 'qr-scanner'; // Different library!
+import QrScanner from 'qr-scanner';
 import { validateQRToken } from '../utils/crypto';
 import { updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/firebase-config';
@@ -29,7 +24,8 @@ import {
   Zap,
   Play,
   Square,
-  RotateCcw
+  RotateCcw,
+  Info
 } from 'lucide-react';
 
 const QRScanner = () => {
@@ -87,7 +83,6 @@ const QRScanner = () => {
         throw new Error('Video element not ready');
       }
 
-      // Create QR Scanner instance
       qrScanner.current = new QrScanner(
         videoRef.current,
         result => handleScanSuccess(result.data),
@@ -95,13 +90,13 @@ const QRScanner = () => {
           returnDetailedScanResult: true,
           highlightScanRegion: true,
           highlightCodeOutline: true,
-          preferredCamera: 'environment', // Use back camera
+          preferredCamera: 'environment',
         }
       );
 
       await qrScanner.current.start();
       setIsScanning(true);
-      showToast('📷 QR Scanner started successfully!', 'success');
+      showToast('📷 QR Scanner started!', 'success');
       
     } catch (error) {
       console.error('❌ Scanner start error:', error);
@@ -134,7 +129,6 @@ const QRScanner = () => {
     setProcessing(true);
     setScanCount(prev => prev + 1);
     
-    // Pause scanner during processing
     if (qrScanner.current) {
       qrScanner.current.pause();
     }
@@ -142,14 +136,10 @@ const QRScanner = () => {
     try {
       // Parse QR data with multiple strategies
       let tokenData = null;
-      let parsedData = null;
 
       // Strategy 1: Direct token validation
       try {
         tokenData = validateQRToken(qrData);
-        if (tokenData) {
-          parsedData = { token: qrData };
-        }
       } catch (e) {
         console.log('Direct validation failed:', e.message);
       }
@@ -157,7 +147,7 @@ const QRScanner = () => {
       // Strategy 2: JSON parsing
       if (!tokenData) {
         try {
-          parsedData = JSON.parse(qrData);
+          const parsedData = JSON.parse(qrData);
           if (parsedData.token) {
             tokenData = validateQRToken(parsedData.token);
           }
@@ -166,21 +156,7 @@ const QRScanner = () => {
         }
       }
 
-      // Strategy 3: URL parameter extraction
-      if (!tokenData && qrData.includes('http')) {
-        try {
-          const url = new URL(qrData);
-          const token = url.searchParams.get('token') || url.searchParams.get('qr');
-          if (token) {
-            tokenData = validateQRToken(token);
-            parsedData = { token };
-          }
-        } catch (e) {
-          console.log('URL parsing failed:', e.message);
-        }
-      }
-
-      // Strategy 4: Simple test data
+      // Strategy 3: Simple test data
       if (!tokenData && qrData.includes('test')) {
         setScanResult({
           success: false,
@@ -214,25 +190,7 @@ const QRScanner = () => {
         setScanResult({
           success: false,
           type: 'wrong_event',
-          message: 'QR code is for a different event',
-          debug: {
-            expectedEvent: eventId,
-            qrCodeEvent: tokenData.eventId
-          }
-        });
-        return;
-      }
-
-      // Check expiration
-      if (tokenData.expires && Date.now() > tokenData.expires) {
-        setScanResult({
-          success: false,
-          type: 'expired',
-          message: 'QR code has expired',
-          debug: {
-            expiredAt: new Date(tokenData.expires).toLocaleString(),
-            currentTime: new Date().toLocaleString()
-          }
+          message: 'QR code is for a different event'
         });
         return;
       }
@@ -245,11 +203,7 @@ const QRScanner = () => {
       setScanResult({
         success: false,
         type: 'processing_error',
-        message: error.message || 'Failed to process QR code',
-        debug: {
-          error: error.message,
-          qrData: qrData
-        }
+        message: error.message || 'Failed to process QR code'
       });
       showToast(error.message, 'error');
     } finally {
@@ -276,7 +230,6 @@ const QRScanner = () => {
       
       const guestData = guestDoc.data();
       
-      // Check if already checked in
       if (guestData.checkedIn) {
         setScanResult({
           success: false,
@@ -289,7 +242,6 @@ const QRScanner = () => {
         return;
       }
       
-      // Update check-in status
       const checkInTime = new Date().toISOString();
       await updateDoc(guestRef, {
         checkedIn: true,
@@ -297,7 +249,6 @@ const QRScanner = () => {
         checkInMethod: 'qr_scanner_v2'
       });
       
-      // Success result
       setScanResult({
         success: true,
         type: 'checked_in',
@@ -332,11 +283,7 @@ const QRScanner = () => {
       setScanResult({
         success: false,
         type: 'file_error',
-        message: 'Could not scan QR code from image',
-        debug: {
-          error: error.message,
-          suggestion: 'Try a clearer image or use camera scanner'
-        }
+        message: 'Could not scan QR code from image'
       });
       showToast('File scan failed', 'error');
     } finally {
@@ -349,12 +296,11 @@ const QRScanner = () => {
 
   // Generate test QR data
   const generateTestData = () => {
-    const testToken = `test-${eventId}-${Date.now()}`;
     const testData = {
       app: "qr-events",
       eventId: eventId,
       guestId: "test-guest-123",
-      token: testToken,
+      token: `test-${eventId}-${Date.now()}`,
       timestamp: Date.now()
     };
     
@@ -381,242 +327,274 @@ const QRScanner = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black">
       <div className="flex">
-        <Sidebar />
-        <div className="flex-1">
-          <Navbar />
-          <main className="p-6">
-            {/* Header */}
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center space-x-4">
-                <button 
-                  onClick={() => window.history.back()}
-                  className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                >
-                  <ArrowLeft className="w-5 h-5 text-gray-400" />
-                </button>
-                <div>
-                  <h1 className="text-2xl font-bold text-white flex items-center space-x-3">
-                    <Camera className="w-6 h-6 text-red-400" />
-                    <span>QR Scanner v2</span>
-                  </h1>
-                  {event && (
-                    <p className="text-gray-400 mt-1">
-                      Scanning for: {event.name}
-                    </p>
+        {/* Sidebar - Fixed position and proper z-index */}
+        <div className="hidden lg:block fixed top-0 left-0 h-full z-40">
+          <Sidebar />
+        </div>
+        
+        {/* Main Content - Properly offset by sidebar width */}
+        <div className="flex-1 lg:ml-64">
+          {/* Navbar - Fixed and properly positioned */}
+          <div className="fixed top-0 right-0 left-0 lg:left-64 z-30">
+            <Navbar />
+          </div>
+          
+          {/* Content Container with Proper Spacing */}
+          <main className="pt-16 lg:pt-20 px-4 sm:px-6 lg:px-8 pb-8">
+            {/* Header Section */}
+            <div className="max-w-7xl mx-auto">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+                {/* Left: Title & Back Button */}
+                <div className="flex items-center space-x-4">
+                  <button 
+                    onClick={() => window.history.back()}
+                    className="p-2 hover:bg-white/10 rounded-lg transition-colors touch-target"
+                  >
+                    <ArrowLeft className="w-5 h-5 text-gray-400" />
+                  </button>
+                  <div>
+                    <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center space-x-3">
+                      <Camera className="w-6 h-6 sm:w-8 sm:h-8 text-red-400" />
+                      <span>QR Scanner</span>
+                    </h1>
+                    {event && (
+                      <p className="text-gray-400 mt-1 text-sm sm:text-base">
+                        {event.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right: Action Buttons */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3 w-full sm:w-auto">
+                  {/* File Upload Button */}
+                  <label className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-purple-600/20 text-purple-400 
+                                  hover:bg-purple-600/30 rounded-lg transition-all duration-300 cursor-pointer touch-target">
+                    <Upload className="w-4 h-4" />
+                    <span className="text-sm font-medium">Upload Image</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  
+                  {/* Test Button */}
+                  <button
+                    onClick={generateTestData}
+                    className="flex items-center justify-center space-x-2 px-4 py-2.5 bg-blue-600/20 text-blue-400 
+                             hover:bg-blue-600/30 rounded-lg transition-all duration-300 touch-target"
+                  >
+                    <Zap className="w-4 h-4" />
+                    <span className="text-sm font-medium">Test QR</span>
+                  </button>
+                  
+                  {/* Scanner Toggle Button */}
+                  {hasCamera && (
+                    !isScanning ? (
+                      <button
+                        onClick={startScanner}
+                        className="flex items-center justify-center space-x-2 px-6 py-2.5 netflix-gradient 
+                                 hover:netflix-gradient-hover rounded-lg text-white font-semibold 
+                                 transition-all duration-300 touch-target"
+                      >
+                        <Play className="w-4 h-4" />
+                        <span>Start Scanner</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={stopScanner}
+                        className="flex items-center justify-center space-x-2 px-6 py-2.5 bg-red-600/20 text-red-400 
+                                 hover:bg-red-600/30 rounded-lg transition-all duration-300 touch-target"
+                      >
+                        <Square className="w-4 h-4" />
+                        <span>Stop Scanner</span>
+                      </button>
+                    )
                   )}
                 </div>
               </div>
 
-              {/* Controls */}
-              <div className="flex items-center space-x-3">
-                {/* File Upload */}
-                <label className="flex items-center space-x-2 px-4 py-2 bg-purple-600/20 text-purple-400 
-                                hover:bg-purple-600/30 rounded-lg transition-all duration-300 cursor-pointer">
-                  <Upload className="w-4 h-4" />
-                  <span>Upload</span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-                
-                {/* Test Data */}
-                <button
-                  onClick={generateTestData}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600/20 text-blue-400 
-                           hover:bg-blue-600/30 rounded-lg transition-all duration-300"
-                >
-                  <Zap className="w-4 h-4" />
-                  <span>Test</span>
-                </button>
-                
-                {/* Scanner Toggle */}
-                {hasCamera && (
-                  !isScanning ? (
-                    <button
-                      onClick={startScanner}
-                      className="flex items-center space-x-2 px-6 py-3 netflix-gradient 
-                               hover:netflix-gradient-hover rounded-lg text-white font-semibold 
-                               transition-all duration-300"
-                    >
-                      <Play className="w-5 h-5" />
-                      <span>Start Scanner</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={stopScanner}
-                      className="flex items-center space-x-2 px-6 py-3 bg-red-600/20 text-red-400 
-                               hover:bg-red-600/30 rounded-lg transition-all duration-300"
-                    >
-                      <Square className="w-5 h-5" />
-                      <span>Stop Scanner</span>
-                    </button>
-                  )
-                )}
-              </div>
-            </div>
+              {/* Main Content Grid */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
+                {/* Scanner Area - Takes 2 columns on xl screens */}
+                <div className="xl:col-span-2">
+                  <div className="glass-dark p-6 sm:p-8 rounded-2xl border border-white/10">
+                    {/* Scanner Header */}
+                    <div className="flex items-center justify-center mb-6">
+                      <h2 className="text-xl sm:text-2xl font-semibold text-white flex items-center space-x-3">
+                        <Camera className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
+                        <span>Camera Scanner</span>
+                      </h2>
+                    </div>
+                    
+                    {/* Scanner Container */}
+                    <div className="relative">
+                      {/* Video Element */}
+                      <video
+                        ref={videoRef}
+                        className={`w-full max-w-md mx-auto rounded-xl shadow-lg ${
+                          isScanning ? 'block' : 'hidden'
+                        }`}
+                        style={{ aspectRatio: '1 / 1' }}
+                      />
+                      
+                      {/* Initial State */}
+                      {!isScanning && !scanResult && !error && (
+                        <div className="text-center py-12 sm:py-16">
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-600/20 rounded-2xl mx-auto mb-6 flex items-center justify-center">
+                            <Camera className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400" />
+                          </div>
+                          <h3 className="text-lg sm:text-xl text-white mb-2 font-semibold">QR Scanner Ready</h3>
+                          <p className="text-gray-400 mb-6 text-sm sm:text-base px-4">
+                            Start camera scanning or upload an image with QR code
+                          </p>
+                          
+                          {/* Action Buttons */}
+                          <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 px-4">
+                            {hasCamera && (
+                              <button
+                                onClick={startScanner}
+                                className="flex items-center justify-center space-x-2 px-6 py-3 netflix-gradient 
+                                         hover:netflix-gradient-hover rounded-xl text-white font-semibold 
+                                         transition-all duration-300 touch-target"
+                              >
+                                <Camera className="w-5 h-5" />
+                                <span>Start Camera</span>
+                              </button>
+                            )}
+                            
+                            <label className="flex items-center justify-center space-x-2 px-6 py-3 bg-purple-600 
+                                            hover:bg-purple-700 rounded-xl text-white font-semibold 
+                                            transition-all duration-300 cursor-pointer touch-target">
+                              <Upload className="w-5 h-5" />
+                              <span>Upload Image</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Error State */}
+                      {error && (
+                        <div className="text-center py-12 sm:py-16">
+                          <div className="w-16 h-16 bg-red-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <XCircle className="w-8 h-8 text-red-400" />
+                          </div>
+                          <h3 className="text-lg sm:text-xl text-red-400 mb-2 font-semibold">Scanner Error</h3>
+                          <p className="text-gray-400 mb-6 px-4 text-sm sm:text-base">{error}</p>
+                          <button
+                            onClick={() => setError(null)}
+                            className="flex items-center justify-center space-x-2 px-6 py-3 bg-red-600/20 text-red-400 
+                                     hover:bg-red-600/30 rounded-lg transition-all duration-300 mx-auto touch-target"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            <span>Try Again</span>
+                          </button>
+                        </div>
+                      )}
+                      
+                      {/* Processing Overlay */}
+                      {processing && (
+                        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-xl 
+                                      flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="loading-spinner mx-auto mb-4"></div>
+                            <p className="text-white font-medium">Processing QR code...</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-            <div className="grid lg:grid-cols-3 gap-8">
-              {/* Scanner Area */}
-              <div className="lg:col-span-2">
-                <div className="glass-dark p-8 rounded-2xl border border-white/10">
-                  <h2 className="text-2xl font-semibold text-white mb-6 flex items-center justify-center">
-                    <Camera className="w-6 h-6 mr-2" />
-                    Camera Scanner v2
-                  </h2>
-                  
-                  <div className="relative">
-                    {/* Video Element */}
-                    <video
-                      ref={videoRef}
-                      className="w-full max-w-md mx-auto rounded-xl"
-                      style={{ display: isScanning ? 'block' : 'none' }}
-                    />
-                    
-                    {/* Initial State */}
-                    {!isScanning && !scanResult && !error && (
-                      <div className="text-center py-16">
-                        <Camera className="w-24 h-24 text-gray-600 mx-auto mb-6" />
-                        <h3 className="text-xl text-white mb-2">QR Scanner v2 Ready</h3>
-                        <p className="text-gray-400 mb-6">
-                          Using improved qr-scanner library
-                        </p>
-                        <div className="flex justify-center space-x-4">
-                          {hasCamera && (
-                            <button
-                              onClick={startScanner}
-                              className="px-8 py-4 netflix-gradient hover:netflix-gradient-hover 
-                                       rounded-xl text-white font-semibold transition-all duration-300"
-                            >
-                              Start Camera
-                            </button>
-                          )}
-                          <label className="px-8 py-4 bg-purple-600 hover:bg-purple-700 
-                                          rounded-xl text-white font-semibold transition-all duration-300 cursor-pointer">
-                            Upload Image
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleFileUpload}
-                              className="hidden"
-                            />
-                          </label>
-                        </div>
+                    {/* Scan Result */}
+                    {scanResult && (
+                      <div className="mt-6 sm:mt-8">
+                        <ScanResultDisplay result={scanResult} />
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Info Panel - Sidebar */}
+                <div className="space-y-6">
+                  {/* Event Info Card */}
+                  <div className="glass-dark p-6 rounded-2xl border border-white/10">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                      <Info className="w-5 h-5 mr-2 text-blue-400" />
+                      Event Details
+                    </h3>
                     
-                    {/* Error State */}
-                    {error && (
-                      <div className="text-center py-16">
-                        <XCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-                        <h3 className="text-xl text-red-400 mb-2">Scanner Error</h3>
-                        <p className="text-gray-400 mb-6">{error}</p>
-                        <button
-                          onClick={() => setError(null)}
-                          className="px-6 py-3 bg-red-600/20 text-red-400 hover:bg-red-600/30 
-                                   rounded-lg transition-all duration-300"
-                        >
-                          <RotateCcw className="w-4 h-4 mr-2 inline" />
-                          Try Again
-                        </button>
-                      </div>
-                    )}
-                    
-                    {/* Processing Overlay */}
-                    {processing && (
-                      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm rounded-xl 
-                                    flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="loading-spinner mx-auto mb-4"></div>
-                          <p className="text-white font-medium">Processing QR code...</p>
+                    {event ? (
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-start">
+                          <span className="text-gray-400">Event Name</span>
+                          <span className="text-white font-medium text-right">{event.name}</span>
                         </div>
+                        <div className="flex justify-between items-start">
+                          <span className="text-gray-400">Event ID</span>
+                          <span className="text-white font-mono text-xs text-right break-all">{eventId}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <div className="loading-spinner mx-auto mb-2"></div>
+                        <p className="text-gray-400 text-sm">Loading event...</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Scan Result */}
-                  {scanResult && (
-                    <div className="mt-8">
-                      <ScanResultDisplay result={scanResult} />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Info Panel */}
-              <div className="space-y-6">
-                {/* Event Info */}
-                <div className="glass-dark p-6 rounded-2xl border border-white/10">
-                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                    <AlertCircle className="w-5 h-5 mr-2 text-blue-400" />
-                    Event Details
-                  </h3>
-                  
-                  {event ? (
+                  {/* Scanner Status Card */}
+                  <div className="glass-dark p-6 rounded-2xl border border-white/10">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                      <RefreshCw className="w-5 h-5 mr-2 text-purple-400" />
+                      Scanner Status
+                    </h3>
+                    
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Event Name</span>
-                        <span className="text-white font-medium">{event.name}</span>
+                        <span className="text-gray-400">Library</span>
+                        <span className="text-green-400 font-medium">qr-scanner v2</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-400">Event ID</span>
-                        <span className="text-white font-mono text-xs">{eventId}</span>
+                        <span className="text-gray-400">Camera</span>
+                        <span className={`font-medium ${hasCamera ? 'text-green-400' : 'text-red-400'}`}>
+                          {hasCamera ? 'Available' : 'Not Available'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Status</span>
+                        <span className={`font-medium ${isScanning ? 'text-green-400' : 'text-gray-400'}`}>
+                          {isScanning ? 'Scanning' : 'Stopped'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Total Scans</span>
+                        <span className="text-white font-medium">{scanCount}</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="text-center py-4">
-                      <div className="loading-spinner mx-auto mb-2"></div>
-                      <p className="text-gray-400 text-sm">Loading event...</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Scanner Status */}
-                <div className="glass-dark p-6 rounded-2xl border border-white/10">
-                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                    <RefreshCw className="w-5 h-5 mr-2 text-purple-400" />
-                    Scanner Status
-                  </h3>
-                  
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Library</span>
-                      <span className="text-green-400 font-medium">qr-scanner v2</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Camera</span>
-                      <span className={`font-medium ${hasCamera ? 'text-green-400' : 'text-red-400'}`}>
-                        {hasCamera ? 'Available' : 'Not Available'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Status</span>
-                      <span className={`font-medium ${isScanning ? 'text-green-400' : 'text-gray-400'}`}>
-                        {isScanning ? 'Scanning' : 'Stopped'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Scans</span>
-                      <span className="text-white font-medium">{scanCount}</span>
-                    </div>
                   </div>
-                </div>
 
-                {/* Help */}
-                <div className="glass-dark p-6 rounded-2xl border border-white/10">
-                  <h3 className="text-lg font-semibold text-white mb-4">
-                    💡 Tips
-                  </h3>
-                  <ul className="text-sm text-gray-400 space-y-2">
-                    <li>• Use "Test" to generate sample QR data</li>
-                    <li>• Upload image if camera doesn't work</li>
-                    <li>• Ensure good lighting for camera</li>
-                    <li>• Hold QR code steady in frame</li>
-                    <li>• Check browser permissions</li>
-                  </ul>
+                  {/* Tips Card */}
+                  <div className="glass-dark p-6 rounded-2xl border border-white/10">
+                    <h3 className="text-lg font-semibold text-white mb-4">
+                      💡 Scanning Tips
+                    </h3>
+                    <ul className="text-sm text-gray-400 space-y-2">
+                      <li>• Use "Test QR" to generate sample data</li>
+                      <li>• Upload image if camera doesn't work</li>
+                      <li>• Ensure good lighting for camera</li>
+                      <li>• Hold QR code steady in frame</li>
+                      <li>• Check browser permissions</li>
+                      <li>• Try different QR code formats</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
@@ -627,14 +605,14 @@ const QRScanner = () => {
   );
 };
 
-// Scan Result Display Component
+// Enhanced Scan Result Display Component
 const ScanResultDisplay = ({ result }) => {
   const getIcon = () => {
     switch (result.type) {
-      case 'checked_in': return <CheckCircle className="w-16 h-16 text-green-400" />;
-      case 'already_checked_in': return <AlertCircle className="w-16 h-16 text-yellow-400" />;
-      case 'test_data': case 'test_qr': return <Zap className="w-16 h-16 text-blue-400" />;
-      default: return <XCircle className="w-16 h-16 text-red-400" />;
+      case 'checked_in': return <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 text-green-400" />;
+      case 'already_checked_in': return <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400" />;
+      case 'test_data': case 'test_qr': return <Zap className="w-12 h-12 sm:w-16 sm:h-16 text-blue-400" />;
+      default: return <XCircle className="w-12 h-12 sm:w-16 sm:h-16 text-red-400" />;
     }
   };
 
@@ -650,19 +628,19 @@ const ScanResultDisplay = ({ result }) => {
   const colors = getColors();
 
   return (
-    <div className={`p-8 rounded-2xl border text-center ${colors.bg}`}>
+    <div className={`p-6 sm:p-8 rounded-2xl border text-center ${colors.bg}`}>
       <div className="mb-4">{getIcon()}</div>
-      <h3 className={`text-2xl font-bold mb-2 ${colors.text}`}>
+      <h3 className={`text-xl sm:text-2xl font-bold mb-2 ${colors.text}`}>
         {result.success ? 'Success!' : 
          result.type.includes('test') ? 'Test Mode' : 'Error'}
       </h3>
-      <p className="text-white text-lg mb-4">{result.message}</p>
+      <p className="text-white text-base sm:text-lg mb-4 px-2">{result.message}</p>
       
       {result.guest && (
         <div className="bg-black/20 rounded-lg p-4 mb-4">
-          <p className="text-white font-semibold">{result.guest.name}</p>
+          <p className="text-white font-semibold text-lg">{result.guest.name}</p>
           {result.guest.email && (
-            <p className="text-gray-400 text-sm">{result.guest.email}</p>
+            <p className="text-gray-400 text-sm mt-1">{result.guest.email}</p>
           )}
           {result.timestamp && (
             <p className="text-gray-500 text-xs mt-2">
@@ -674,13 +652,13 @@ const ScanResultDisplay = ({ result }) => {
 
       {result.debug && (
         <details className="bg-black/30 rounded-lg p-4 mt-4 text-left">
-          <summary className="text-white font-semibold mb-2 cursor-pointer">
-            🐛 Debug Info
+          <summary className="text-white font-semibold mb-2 cursor-pointer text-sm">
+            🐛 Debug Information
           </summary>
           <div className="space-y-2 text-xs text-gray-300">
             {Object.entries(result.debug).map(([key, value]) => (
               <div key={key}>
-                <span className="text-gray-400 capitalize">{key.replace('_', ' ')}:</span>
+                <span className="text-gray-400 capitalize text-xs">{key.replace('_', ' ')}:</span>
                 <pre className="font-mono bg-black/50 p-2 rounded mt-1 text-gray-300 overflow-auto text-xs">
                   {Array.isArray(value) ? value.join('\n') : String(value)}
                 </pre>
